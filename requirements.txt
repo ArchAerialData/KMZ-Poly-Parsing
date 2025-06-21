@@ -1,0 +1,3 @@
+pip install shapely pyproj
+
+The script may also use modules like xml.etree.ElementTree, zipfile, csv, re, os, sys, and logging
