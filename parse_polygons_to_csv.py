@@ -4,10 +4,25 @@ import zipfile
 import xml.etree.ElementTree as ET
 import logging
 import re
-import csv
-from shapely.geometry import Polygon
-from shapely.ops import transform
-from pyproj import Transformer
+try:
+    from openpyxl import Workbook
+    from openpyxl.utils import get_column_letter
+except ImportError:  # pragma: no cover - dependency check
+    print("The 'openpyxl' package is required. Install it with 'pip install openpyxl'.")
+    raise
+
+try:
+    from shapely.geometry import Polygon
+    from shapely.ops import transform
+except ImportError:  # pragma: no cover - dependency check
+    print("The 'shapely' package is required. Install it with 'pip install shapely'.")
+    raise
+
+try:
+    from pyproj import Transformer
+except ImportError:  # pragma: no cover - dependency check
+    print("The 'pyproj' package is required. Install it with 'pip install pyproj'.")
+    raise
 
 # Setup logging
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LOG.txt")
@@ -56,7 +71,7 @@ def extract_polygon_coords(polygon_el) -> tuple:
 
 def parse_area_from_description(description: str) -> tuple:
     """Parse area value and unit from description (e.g., 'Area: 5.2 sq mi')."""
-    match = re.search(r'Area:\s*(\d+\.?\d*)\s*(\w+)', description, re.IGNORECASE)
+    match = re.search(r"Area:\s*([\d\.]+)\s*([a-zA-Z\s]+)", description, re.IGNORECASE)
     if match:
         value = float(match.group(1))
         unit = match.group(2).lower()
@@ -74,6 +89,10 @@ def convert_to_acres(value: float, unit: str) -> float:
         return value * 2.47105
     elif unit in ['sq km', 'square kilometers']:
         return value * 247.105
+    elif unit in ['sq ft', 'square feet', 'sqft']:
+        return value / 43560
+    elif unit in ['sq m', 'square meters', 'square metres', 'sq meter', 'sq metre']:
+        return value / 4046.86
     else:
         raise ValueError(f"Unknown unit: {unit}")
 
@@ -158,17 +177,38 @@ def main():
         print("No polygons found in the KML file.")
         sys.exit(0)
     
-    # Write results to CSV
+    # Write results to XLSX with total and formulas
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    csv_path = os.path.join(script_dir, 'polygon_areas.csv')
-    
-    with open(csv_path, 'w', newline='') as csvfile:
-        writer = csv.writer(csvfile)
-        writer.writerow(['Polygon Name', 'Acreage'])
-        for name, area in results:
-            writer.writerow([name, f"{area:.2f}"])
-    
-    print(f"CSV report generated: {csv_path}")
+    xlsx_path = os.path.join(script_dir, 'polygon_areas.xlsx')
+
+    total_acres = sum(area for _, area in results)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Polygon Areas"
+
+    ws.append(["Polygon Name", "Total Acreage", "Total", "Conversions"])
+
+    for name, area in results:
+        ws.append([name, round(area, 2)])
+
+    end_row = ws.max_row
+    total_cell = f"C2"
+    ws[total_cell] = f"=SUM(B2:B{end_row})"
+    conversion_formula = (
+        f"=TEXT({total_cell}*43560, \"0.00\") & \" sq ft | \" & "
+        f"TEXT({total_cell}/640, \"0.00\") & \" sq mi | \" & "
+        f"TEXT({total_cell}*4046.86, \"0.00\") & \" sq m\""
+    )
+    ws["D2"] = conversion_formula
+
+    # Adjust column widths
+    for col in range(1, ws.max_column + 1):
+        ws.column_dimensions[get_column_letter(col)].width = 20
+
+    wb.save(xlsx_path)
+
+    print(f"XLSX report generated: {xlsx_path}")
 
 if __name__ == "__main__":
     main()
