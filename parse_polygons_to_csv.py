@@ -5,9 +5,19 @@ import xml.etree.ElementTree as ET
 import logging
 import re
 import csv
-from shapely.geometry import Polygon
-from shapely.ops import transform
-from pyproj import Transformer
+
+try:
+    from shapely.geometry import Polygon
+    from shapely.ops import transform
+except ImportError:  # pragma: no cover - dependency check
+    print("The 'shapely' package is required. Install it with 'pip install shapely'.")
+    raise
+
+try:
+    from pyproj import Transformer
+except ImportError:  # pragma: no cover - dependency check
+    print("The 'pyproj' package is required. Install it with 'pip install pyproj'.")
+    raise
 
 # Setup logging
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LOG.txt")
