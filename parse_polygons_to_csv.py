@@ -5,9 +5,19 @@ import xml.etree.ElementTree as ET
 import logging
 import re
 import csv
-from shapely.geometry import Polygon
-from shapely.ops import transform
-from pyproj import Transformer
+
+try:
+    from shapely.geometry import Polygon
+    from shapely.ops import transform
+except ImportError:  # pragma: no cover - dependency check
+    print("The 'shapely' package is required. Install it with 'pip install shapely'.")
+    raise
+
+try:
+    from pyproj import Transformer
+except ImportError:  # pragma: no cover - dependency check
+    print("The 'pyproj' package is required. Install it with 'pip install pyproj'.")
+    raise
 
 # Setup logging
 LOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "LOG.txt")
@@ -56,7 +66,7 @@ def extract_polygon_coords(polygon_el) -> tuple:
 
 def parse_area_from_description(description: str) -> tuple:
     """Parse area value and unit from description (e.g., 'Area: 5.2 sq mi')."""
-    match = re.search(r'Area:\s*(\d+\.?\d*)\s*(\w+)', description, re.IGNORECASE)
+    match = re.search(r"Area:\s*([\d\.]+)\s*([a-zA-Z\s]+)", description, re.IGNORECASE)
     if match:
         value = float(match.group(1))
         unit = match.group(2).lower()
@@ -74,6 +84,10 @@ def convert_to_acres(value: float, unit: str) -> float:
         return value * 2.47105
     elif unit in ['sq km', 'square kilometers']:
         return value * 247.105
+    elif unit in ['sq ft', 'square feet', 'sqft']:
+        return value / 43560
+    elif unit in ['sq m', 'square meters', 'square metres', 'sq meter', 'sq metre']:
+        return value / 4046.86
     else:
         raise ValueError(f"Unknown unit: {unit}")
 
@@ -158,15 +172,22 @@ def main():
         print("No polygons found in the KML file.")
         sys.exit(0)
     
-    # Write results to CSV
+    # Write results to CSV with total column
     script_dir = os.path.dirname(os.path.abspath(__file__))
     csv_path = os.path.join(script_dir, 'polygon_areas.csv')
-    
+
+    total_acres = sum(area for _, area in results)
+
     with open(csv_path, 'w', newline='') as csvfile:
         writer = csv.writer(csvfile)
-        writer.writerow(['Polygon Name', 'Acreage'])
+        writer.writerow(['Polygon Name', 'Total Acreage', 'Total'])
+        first = True
         for name, area in results:
-            writer.writerow([name, f"{area:.2f}"])
+            row = [name, f"{area:.2f}", '']
+            if first:
+                row[2] = f"{total_acres:.2f}"
+                first = False
+            writer.writerow(row)
     
     print(f"CSV report generated: {csv_path}")
 
